@@ -27,7 +27,7 @@ jobs:
             exit 1
           fi
 
-          echo "Found: $ZIP_FILE"
+          echo "Found ZIP: $ZIP_FILE"
 
           mkdir -p android-project
           unzip -q "$ZIP_FILE" -d android-project
@@ -40,15 +40,19 @@ jobs:
         run: |
           set -e
 
-          PROJECT_DIR=$(find android-project -name "settings.gradle.kts" -o -name "settings.gradle" | head -n 1 | xargs dirname)
+          PROJECT_DIR=$(find android-project \
+            \( -name "settings.gradle.kts" -o -name "settings.gradle" \) \
+            -print -quit | xargs dirname)
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Could not find settings.gradle.kts"
+            echo "ERROR: Could not find settings.gradle.kts or settings.gradle"
             exit 1
           fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Android project found at: $PROJECT_DIR"
+
+          echo "Android project found at:"
+          echo "$PROJECT_DIR"
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -63,10 +67,16 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
-                - name: Create debug keystore
+
+      - name: Create debug keystore
         working-directory: ${{ env.PROJECT_DIR }}
+        shell: bash
         run: |
+          set -e
+
           if [ ! -f debug.keystore ]; then
+            echo "Creating debug.keystore..."
+
             keytool -genkeypair -v \
               -keystore debug.keystore \
               -storepass android \
@@ -76,18 +86,31 @@ jobs:
               -keysize 2048 \
               -validity 10000 \
               -dname "CN=Android Debug,O=Android,C=US"
+
+            echo "Debug keystore created successfully."
+          else
+            echo "debug.keystore already exists."
           fi
 
       - name: Build Debug APK
         working-directory: ${{ env.PROJECT_DIR }}
+        shell: bash
         run: |
+          set -e
+
+          echo "Building TradePulse APK..."
+
           gradle assembleDebug --stacktrace
 
       - name: Find APK
         shell: bash
         run: |
-          echo "APK files:"
-          find "$PROJECT_DIR" -type f -name "*.apk" -print
+          echo "APK files found:"
+
+          find "$PROJECT_DIR" \
+            -type f \
+            -name "*.apk" \
+            -print
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
